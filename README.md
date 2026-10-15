@@ -17,3 +17,14 @@ Common repository, dependency, and virtual-environment directories are excluded 
 The postcard is a compact inventory, not a backup, duplicate detector, malware scan, or proof of file integrity. Requires Python 3.10 or newer.
 
 Part of the [Logan Pendragon Forge open-source collection](https://www.loganpendragonforge.com/open-source/). Licensed under the [MIT License](LICENSE).
+
+## Compare metadata postcards
+
+```bash
+folder-postcard ~/Documents --format json --output before.json
+folder-postcard ~/Documents --compare before.json --format json --output after.json
+```
+
+Version 2 JSON postcards include every scanned file's relative path and size, plus exclusion and incomplete-path metadata. Comparison lists added, removed and size-changed files in path order. Inaccessible directories, symlinks and special files are recorded as uncertain scan regions; absence in those regions or in excluded paths never proves removal. A missing root fails the command. HTML and Markdown reports include the comparison too. Existing output files are refused.
+
+Version 1 postcards cannot be compared because they contain only the largest files; create a new JSON baseline first. Compare the same logical folder yourself: its display name does not establish identity. Equal sizes do not prove equal contents; no source file content is opened, hashed or executed. Scans are observations rather than filesystem snapshots, so concurrent changes can make a scan incomplete. JSON postcards reveal filenames and sizes and should be shared deliberately.
