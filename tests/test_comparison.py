@@ -8,6 +8,7 @@ from folder_manifest_postcard.cli import main
 from folder_manifest_postcard.core import (
     compare_manifests,
     render_html,
+    render_json,
     render_markdown,
     scan_folder,
     validate_manifest,
@@ -123,7 +124,6 @@ def test_file_stat_failure_and_special_files(tmp_path, monkeypatch):
         lambda r: r["entries"].append({"path": "../bad", "bytes": 0}),
         lambda r: r["entries"].append({"path": "x", "bytes": True}),
         lambda r: r["entries"].extend([{"path": "x", "bytes": 0}] * 2),
-        lambda r: r["entries"].append({"path": "a\\b", "bytes": 0}),
     ],
 )
 def test_manifest_validation(tmp_path, mutation):
@@ -155,3 +155,66 @@ def test_comparison_cli_and_safe_reports(tmp_path, capsys):
     out = tmp_path / "out.html"
     assert main([str(root), "--output", str(out), "--format", "html"]) == 0
     assert out.read_text(encoding="utf-8").startswith("<!doctype")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="literal backslash filenames require POSIX")
+def test_posix_backslash_scan_json_and_cli_round_trip(tmp_path, capsys):
+    root = tmp_path / "files"
+    root.mkdir()
+    source = root / r"a\b"
+    source.write_bytes(b"old")
+    directory = root / r"sub\dir"
+    directory.mkdir()
+    (directory / "é.txt").write_bytes(b"")
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(render_json(scan_folder(root)), encoding="utf-8")
+    previous = json.loads(baseline.read_text(encoding="utf-8"))
+    assert [entry["path"] for entry in previous["entries"]] == [r"a\b", "sub\\dir/é.txt"]
+    unchanged = compare_manifests(previous, scan_folder(root))
+    assert unchanged["added"] == unchanged["removed"] == unchanged["size_changed"] == []
+    assert main([str(root), "--compare", str(baseline), "--format", "json"]) == 0
+    assert json.loads(capsys.readouterr().out)["comparison"]["complete"]
+    source.write_bytes(b"changed")
+    changed = compare_manifests(previous, scan_folder(root))
+    assert changed["size_changed"] == [{"path": r"a\b", "before_bytes": 3, "after_bytes": 7}]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/absolute",
+        "//server/file",
+        "../escape",
+        "a/../../escape",
+        "a/../b",
+        "./a",
+        "a/./b",
+        "a//b",
+        "a/",
+        "",
+        ".",
+        "..",
+        "a\x00b",
+    ],
+)
+def test_manifest_paths_reject_absolute_and_traversal_components(tmp_path, path):
+    report = scan_folder(tmp_path)
+    report["entries"] = [{"path": path, "bytes": 0}]
+    with pytest.raises(ValueError, match="safe relative paths"):
+        validate_manifest(report)
+    report["entries"] = []
+    if path != ".":
+        report["scan"].update(incomplete_paths=[path], complete=False)
+        with pytest.raises(ValueError, match="invalid incomplete path"):
+            validate_manifest(report)
+
+
+def test_backslash_identity_is_not_normalized_as_native_traversal(tmp_path):
+    # These are literal components in the manifest's POSIX grammar, not paths to open.
+    previous = scan_folder(tmp_path)
+    previous["entries"] = [{"path": r"..\literal", "bytes": 0}, {"path": r"a\b", "bytes": 1}]
+    current = json.loads(render_json(previous))
+    current["scan"].update(incomplete_paths=[r"a\b"], complete=False)
+    current["entries"] = current["entries"][:1]
+    result = compare_manifests(previous, current)
+    assert result["removed"] == [] and result["uncertain_paths"] == [r"a\b"]

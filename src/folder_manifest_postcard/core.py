@@ -181,11 +181,12 @@ def validate_manifest(value: Any) -> dict[str, Any]:
 
 
 def _valid_path(value: Any) -> bool:
+    # Manifest identities always use POSIX separators, never host-native path parsing.
+    # A backslash can be a literal POSIX filename character; these strings are never opened.
     return (
         isinstance(value, str)
         and bool(value)
         and not value.startswith("/")
-        and "\\" not in value
         and "\x00" not in value
         and all(part not in {"", ".", ".."} for part in value.split("/"))
     )
