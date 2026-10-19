@@ -30,3 +30,18 @@ Version 2 JSON postcards include every scanned file's relative path and size, pl
 Version 1 postcards cannot be compared because they contain only the largest files; create a new JSON baseline first. Compare the same logical folder yourself: its display name does not establish identity. Equal sizes do not prove equal contents; no source file content is opened, hashed or executed. Scans are observations rather than filesystem snapshots, so concurrent changes can make a scan incomplete. JSON postcards reveal filenames and sizes and should be shared deliberately.
 
 Manifest paths always use `/` as the directory separator, regardless of the reading platform. Backslashes in POSIX filenames remain literal characters in JSON and comparison identities; manifest paths are never opened or interpreted as native filesystem paths. Absolute POSIX paths, NUL characters and empty, `.` or `..` path components are rejected.
+
+## Report and release behavior
+
+Install the wheel from the GitHub release with python -m pip install ./PACKAGE.whl,
+using the actual downloaded filename. The source distribution can also be installed
+with pip. The wheel includes these handoff documents and supplied examples under
+share/folder-manifest-postcard/ in the installation prefix. A repository checkout is the easiest
+way to run the README examples as written.
+
+Invalid inputs or failed output writes return exit status 2. A successful command
+returns 0. Report files must be new: existing files, directories and symlinks are
+refused. Keep reports outside scanned folders to avoid counting prior reports.
+A failed write may leave a partial newly created report; no power-loss transaction
+is promised. Closed stdout pipes return 2. Filenames, story data and paths in
+reports can be sensitive; review before sharing.

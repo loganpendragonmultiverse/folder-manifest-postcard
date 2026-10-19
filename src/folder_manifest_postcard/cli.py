@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .core import compare_manifests, render_html, render_json, render_markdown, scan_folder
+from .output import write_report
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,12 +26,7 @@ def main(argv: list[str] | None = None) -> int:
         rendered = {"markdown": render_markdown, "html": render_html, "json": render_json}[
             args.format
         ](report)
-        if args.output:
-            if args.output.exists():
-                raise ValueError(f"output already exists: {args.output}")
-            args.output.write_text(rendered, encoding="utf-8")
-        else:
-            sys.stdout.write(rendered)
+        write_report(args.output, rendered)
     except (OSError, UnicodeError, TypeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

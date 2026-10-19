@@ -4,6 +4,7 @@ import fnmatch
 import html
 import json
 import os
+import re
 import stat
 from collections import Counter
 from pathlib import Path
@@ -26,7 +27,7 @@ def _excluded(relative: str, patterns: list[str]) -> bool:
 def scan_folder(root: Path, excludes: list[str] | None = None, largest: int = 8) -> dict[str, Any]:
     if not root.is_dir():
         raise ValueError("root must be a directory")
-    if largest < 0:
+    if type(largest) is not int or largest < 0:
         raise ValueError("largest must be non-negative")
     patterns = [*DEFAULT_EXCLUDES, *(excludes or [])]
     files = []
@@ -93,18 +94,34 @@ def scan_folder(root: Path, excludes: list[str] | None = None, largest: int = 8)
     }
 
 
+def _literal(value: Any) -> str:
+    text = re.sub(r"([\\*_{}\[\]()#+!|~-])", r"\\\1", str(value))
+    text = html.escape(text, quote=False)
+    return text.replace("\r", "&#13;").replace("\n", "&#10;").replace(chr(96), "&#96;")
+
+
+def _comparison_block(value: Any) -> list[str]:
+    payload = json.dumps(value, indent=2, ensure_ascii=False)
+    fence = chr(96) * max(
+        3, max((len(run) for run in re.findall(chr(96) + "+", payload)), default=0) + 1
+    )
+    return [fence + "json", payload, fence]
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     lines = [
-        f"# {report['name']} Folder Postcard",
+        f"# {_literal(report['name'])} Folder Postcard",
         "",
         f"**{report['files']} files · {report['folders']} folders · {report['bytes']:,} bytes**",
         "",
         "## File types",
         "",
     ]
-    lines.extend(f"- `{extension}`: {count}" for extension, count in report["extensions"].items())
+    lines.extend(
+        f"- {_literal(extension)}: {count}" for extension, count in report["extensions"].items()
+    )
     lines.extend(["", "## Largest files", "", "| File | Bytes |", "|---|---:|"])
-    lines.extend(f"| `{item['path']}` | {item['bytes']:,} |" for item in report["largest"])
+    lines.extend(f"| {_literal(item['path'])} | {item['bytes']:,} |" for item in report["largest"])
     if report["skipped_symlinks"]:
         lines.extend(["", f"Skipped symlinks: {report['skipped_symlinks']}"])
     if "comparison" in report:
@@ -113,9 +130,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 "",
                 "## Comparison",
                 "",
-                "```json",
-                json.dumps(report["comparison"], indent=2, ensure_ascii=False),
-                "```",
+                *_comparison_block(report["comparison"]),
             ]
         )
     if not report["scan"]["complete"]:
@@ -142,7 +157,7 @@ def render_html(report: dict[str, Any]) -> str:
     if not report["scan"]["complete"]:
         comparison += "<p>Scan incomplete; absent paths may be unknown.</p>"
     name = html.escape(report["name"])
-    return f"""<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>{name} folder postcard</title><style>body{{font:16px system-ui;margin:0;padding:24px;background:#eef0ea;color:#19211d}}main{{max-width:820px;margin:auto;background:white;border:2px solid;padding:28px}}.totals{{font-size:1.35rem}}ul{{padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;list-style:none}}li{{display:flex;justify-content:space-between;border:1px solid;padding:10px}}table{{width:100%;border-collapse:collapse}}td,th{{padding:9px;border:1px solid;text-align:left}}td:last-child,th:last-child{{text-align:right}}</style><main><h1>{name}</h1><p class=totals>{report["files"]} files · {report["folders"]} folders · {report["bytes"]:,} bytes</p><h2>File types</h2><ul>{extensions}</ul><h2>Largest files</h2><table><tr><th>File</th><th>Bytes</th></tr>{files}</table>{comparison}</main></html>\n"""
+    return f"""<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>{name} folder postcard</title><style>body{{font:16px system-ui;margin:0;padding:24px;background:#eef0ea;color:#19211d}}main{{max-width:820px;margin:auto;background:white;border:2px solid;padding:28px}}.totals{{font-size:1.35rem}}ul{{padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;list-style:none}}li{{display:flex;justify-content:space-between;border:1px solid;padding:10px;min-width:0;gap:8px}}li strong{{min-width:0;overflow-wrap:anywhere}}table{{width:100%;border-collapse:collapse;table-layout:fixed}}td,th{{padding:9px;border:1px solid;text-align:left;overflow-wrap:anywhere}}pre{{white-space:pre-wrap;overflow-wrap:anywhere}}h1{{overflow-wrap:anywhere}}td:last-child,th:last-child{{text-align:right}}</style><main><h1>{name}</h1><p class=totals>{report["files"]} files · {report["folders"]} folders · {report["bytes"]:,} bytes</p><h2>File types</h2><ul>{extensions}</ul><h2>Largest files</h2><table><tr><th>File</th><th>Bytes</th></tr>{files}</table>{comparison}</main></html>\n"""
 
 
 def render_json(report: dict[str, Any]) -> str:

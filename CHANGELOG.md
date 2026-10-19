@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 - 2026-10-19
+
+- Protect report destinations with exclusive creation and handle closed output pipes cleanly.
+- Keep unusual filenames literal in Markdown, wrap long HTML evidence on narrow screens, and document development and release tests.
+
 ## 1.1.0 - 2026-10-15
 
 - Preserve literal POSIX backslashes in serialized path identities while rejecting absolute paths and traversal components.
