@@ -56,15 +56,16 @@ def test_stdout_and_new_utf8_report(tmp_path, capsys):
     assert output.read_bytes() == "café\r\n".encode()
 
 
-def test_broken_stream_without_descriptor():
+@pytest.mark.parametrize("failure", [BrokenPipeError("closed"), OSError(22, "invalid argument")])
+def test_broken_stream_without_descriptor(failure):
     class Broken:
         def write(self, text):
-            raise BrokenPipeError("closed")
+            raise failure
 
         def fileno(self):
             raise ValueError("no descriptor")
 
-    with patch.object(sys, "stdout", Broken()), pytest.raises(BrokenPipeError):
+    with patch.object(sys, "stdout", Broken()), pytest.raises(OSError):
         write_stdout("small")
 
 

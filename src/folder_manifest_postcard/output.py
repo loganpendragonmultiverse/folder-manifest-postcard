@@ -10,7 +10,7 @@ def write_stdout(text: str) -> None:
     try:
         sys.stdout.write(text)
         sys.stdout.flush()
-    except BrokenPipeError:
+    except OSError:
         # Prevent a second broken-pipe exception during interpreter shutdown.
         try:
             descriptor = sys.stdout.fileno()
@@ -25,6 +25,8 @@ def write_report(output: Path | None, text: str) -> None:
     if output is None:
         write_stdout(text)
     else:
+        if output.is_symlink():
+            raise FileExistsError(f"output must not be a symlink: {output}")
         # Exclusive creation also refuses dangling symlinks and racing writers.
         with output.open("x", encoding="utf-8", newline="") as stream:
             stream.write(text)
